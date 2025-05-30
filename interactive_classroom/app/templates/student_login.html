@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block title %}Student Login{% endblock %}
+
+{% block content %}
+<div class="student-login-container">
+    <h1>Join the Interactive Session</h1>
+
+    {# Flashed messages are handled in base.html, but you can have specific error display here if needed #}
+    {% if error %}
+        <p class="flash-message flash-error">{{ error }}</p>
+    {% endif %}
+
+    {% if session_code %} {# Changed from session_id to session_code #}
+        <p>You are joining session: <strong>{{ session_code }}</strong></p>
+        <p>Please log in with your Google account to participate.</p>
+        <a href="{{ url_for('main.student_google_login') }}" class="button">Login with Google</a>
+    {% else %}
+        {# This part might not be reached if session_code is always required by the route #}
+        <p>Please use the link or QR code provided by your teacher to join a session.</p>
+        <p><a href="{{ url_for('main.index') }}" class="button button-secondary">Go to homepage</a></p>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+
+{% block title %}Student Dashboard - {{ current_user.name }}{% endblock %}
+
+{% block head_extra %}
+    {# Removed inline styles, will be handled by main.css or specific dashboard styles if needed #}
+{% endblock %}
+
+{% block content %}
+<div class="student-dashboard-container text-center">
+    <h1>Welcome, {{ name }}!</h1> {# name is passed from the route #}
+    
+    <div class="session-info my-3">
+        {% if current_session_code %} {# This variable is passed from the route #}
+            <p>You are connected to Session: <strong class="text-primary">{{ current_session_code }}</strong></p>
+        {% else %}
+            <p class="text-warning">Not connected to any active session. Please join one.</p>
+        {% endif %}
+    </div>
+
+    <p class="status-message" id="overall-status">Waiting for the teacher to start the question...</p>
+
+    <div id="question-area" class="card my-4">
+        <div class="card-header">Current Question</div>
+        <div class="card-body">
+            <h2 id="question-text" class="card-title">Waiting for question...</h2>
+            <p class="card-text">Question Reference: <span id="question-id-display" class="text-muted">N/A</span></p>
+        </div>
+    </div>
+
+    <div id="answer-options" class="mb-3">
+        <button class="answer-btn button" data-choice="A" disabled>A</button>
+        <button class="answer-btn button" data-choice="B" disabled>B</button>
+        <button class="answer-btn button" data-choice="C" disabled>C</button>
+        <button class="answer-btn button" data-choice="D" disabled>D</button>
+    </div>
+    <p id="answer-status" class="font-weight-bold"></p>
+    
+    {# Logout button is in base.html navbar #}
+</div>
+
+{# This hidden div passes the session code (which is a UUID string) to JavaScript #}
+{# It was current_session_id before, ensure routes.py passes current_session_code to this template #}
+<div id="session-data" data-session-id="{{ current_session_code }}" style="display: none;"></div>
+{% endblock %}
+
+{% block scripts_extra %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const questionTextEl = document.getElementById('question-text');
+        const questionIdDisplayEl = document.getElementById('question-id-display');
+        // const answerOptionsDiv = document.getElementById('answer-options'); // Not directly used
+        const answerStatusEl = document.getElementById('answer-status');
+        const answerButtons = document.querySelectorAll('.answer-btn');
+        const sessionDataEl = document.getElementById('session-data');
+        
+        const overallStatusEl = document.getElementById('overall-status');
+        let currentDisplayedQuestionRefId = null; 
+        let currentQuestionDBIdForSubmission = null; 
+        const currentSessionCodeForDisplay = sessionDataEl ? sessionDataEl.dataset.sessionId : null; 
+
+        if (!currentSessionCodeForDisplay) { 
+            answerStatusEl.textContent = 'Error: Session information not found in page data. Cannot submit answers.';
+            answerStatusEl.className = 'flash-message flash-error'; // Use CSS classes for styling
+            overallStatusEl.textContent = 'Error: Session information missing. Please rejoin.';
+            overallStatusEl.className = 'flash-message flash-error';
+            answerButtons.forEach(btn => btn.disabled = true);
+            return;
+        }
+        
+        async function fetchCurrentQuestion() {
+            try {
+                const response = await fetch("{{ url_for('main.get_current_question') }}");
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({ message: `HTTP error ${response.status}` }));
+                    overallStatusEl.textContent = errorData.message || 'Session error or ended. Please rejoin if needed.';
+                    overallStatusEl.className = 'flash-message flash-warning'; // Use CSS classes
+                    questionTextEl.textContent = 'Error fetching question';
+                    questionIdDisplayEl.textContent = 'N/A';
+                    currentDisplayedQuestionRefId = null;
+                    currentQuestionDBIdForSubmission = null;
+                    answerButtons.forEach(btn => btn.disabled = true);
+                    answerStatusEl.textContent = ''; // Clear specific answer status
+                    if (response.status === 403 || response.status === 400) { 
+                        // clearInterval(questionPollingInterval); // Optionally stop polling
+                    }
+                    return;
+                }
+                
+                const data = await response.json();
+
+                if (data.status === 'new_question') {
+                    // Only update if question ID changes OR if buttons were previously disabled (e.g. for a 'closed' question that reopened)
+                    if (data.question.id !== currentDisplayedQuestionRefId || answerButtons[0].disabled) { 
+                        questionTextEl.textContent = data.question.text;
+                        questionIdDisplayEl.textContent = data.question.id; 
+                        
+                        currentDisplayedQuestionRefId = data.question.id;
+                        currentQuestionDBIdForSubmission = data.question.db_id; 
+                        const questionStatusFromServer = data.question.status;
+
+                        if (questionStatusFromServer === 'open') {
+                            answerStatusEl.textContent = 'New question. Please select an answer.';
+                            answerStatusEl.className = 'flash-message flash-info';
+                            overallStatusEl.textContent = 'Question is active and open for answers.';
+                            overallStatusEl.className = 'flash-message flash-success';
+                            answerButtons.forEach(btn => btn.disabled = false);
+                        } else if (questionStatusFromServer === 'closed') {
+                            answerStatusEl.textContent = 'This question is now closed for answers.';
+                            answerStatusEl.className = 'flash-message flash-warning';
+                            overallStatusEl.textContent = `Question ${data.question.id} is closed. Waiting for next.`;
+                            overallStatusEl.className = 'flash-message flash-info';
+                            answerButtons.forEach(btn => btn.disabled = true);
+                        }
+                    }
+                } else if (data.status === 'no_active_question') {
+                    if (currentDisplayedQuestionRefId !== null || questionTextEl.textContent !== 'Waiting for the next question...') { 
+                        questionTextEl.textContent = 'Waiting for the next question...';
+                        questionIdDisplayEl.textContent = 'N/A';
+                        currentDisplayedQuestionRefId = null;
+                        currentQuestionDBIdForSubmission = null;
+                        answerStatusEl.textContent = ''; // Clear specific answer status
+                        overallStatusEl.textContent = data.message || 'No question currently active.';
+                        overallStatusEl.className = 'flash-message flash-info';
+                        answerButtons.forEach(btn => btn.disabled = true);
+                    }
+                } else if (data.status === 'error') { // Generic error from server for get_current_question
+                    overallStatusEl.textContent = data.message || 'Error retrieving question data.';
+                    overallStatusEl.className = 'flash-message flash-error';
+                }
+            } catch (error) {
+                console.error('Error fetching current question:', error);
+                overallStatusEl.textContent = 'Failed to fetch question (network/server issue). Retrying...';
+                overallStatusEl.className = 'flash-message flash-error';
+            }
+        }
+
+        answerButtons.forEach(button => {
+            button.addEventListener('click', function(event) {
+                if (!currentQuestionDBIdForSubmission) {
+                    answerStatusEl.textContent = 'No active question to answer.';
+                    answerStatusEl.className = 'flash-message flash-warning';
+                    return;
+                }
+                const chosenAnswer = event.target.dataset.choice;
+                submitAnswer(currentQuestionDBIdForSubmission, chosenAnswer);
+            });
+        });
+
+        async function submitAnswer(questionDBId, chosenAnswer) { 
+            answerStatusEl.textContent = 'Submitting...';
+            answerStatusEl.className = 'flash-message flash-info';
+            answerButtons.forEach(btn => btn.disabled = true); // Disable during submission
+
+            try {
+                const response = await fetch("{{ url_for('main.student_submit_answer') }}", {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', },
+                    body: JSON.stringify({
+                        question_db_id: questionDBId, 
+                        chosen_answer: chosenAnswer,
+                    })
+                });
+                const result = await response.json();
+                if (response.ok && result.status === 'success') {
+                    answerStatusEl.textContent = result.message || 'Answer submitted successfully!';
+                    answerStatusEl.className = 'flash-message flash-success';
+                    // Buttons remain disabled until a new question is fetched or this one re-opens (if that's a feature)
+                } else {
+                    answerStatusEl.textContent = result.message || 'Error submitting answer.';
+                    answerStatusEl.className = 'flash-message flash-error';
+                    // Re-enable buttons ONLY if it's an error that allows retry for THIS question
+                    // For example, a server error (500) might allow retry.
+                    // A 409 (already answered) or 403 (question closed) should not re-enable.
+                    if (response.status !== 409 && response.status !== 403) {
+                        answerButtons.forEach(btn => btn.disabled = false); 
+                    }
+                }
+            } catch (error) {
+                console.error('Error submitting answer:', error);
+                answerStatusEl.textContent = 'Network error or server issue. Please try again.';
+                answerStatusEl.className = 'flash-message flash-error';
+                answerButtons.forEach(btn => btn.disabled = false); 
+            }
+        }
+
+        fetchCurrentQuestion(); 
+        const questionPollingInterval = setInterval(fetchCurrentQuestion, 3000);
+    });
+</script>
+{% endblock %}
