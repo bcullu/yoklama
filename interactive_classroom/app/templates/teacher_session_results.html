@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block title %}Results - {{ class_session.session_code }}{% endblock %}
+
+{% block content %}
+<div class="teacher-results-container">
+    <h1>Results for Session: <span class="text-primary">{{ class_session.session_code }}</span></h1>
+    <p class="lead">DB ID: {{ class_session.id }}</p>
+
+    <div class="session-summary card mb-4">
+        <div class="card-header">Summary</div>
+        <div class="card-body">
+            <p><strong>Total Participants:</strong> <span class="badge badge-info">{{ total_participants }}</span></p>
+            <p><strong>Session Status:</strong> 
+                {% if class_session.is_active %}
+                    <span class="badge badge-success">Active</span>
+                {% else %}
+                    <span class="badge badge-danger">Ended</span>
+                {% endif %}
+            </p>
+        </div>
+    </div>
+
+    {% if top_3_students %}
+        <div class="top-students card mb-4">
+            <div class="card-header">Top {{ top_3_students|length }} Student(s)</div>
+            <ul class="list-group list-group-flush">
+                {% for student in top_3_students %}
+                    <li class="list-group-item">{{ loop.index }}. {{ student.name }} ({{ student.email }}) - Score: <span class="badge badge-success">{{ student.score }}</span></li>
+                {% endfor %}
+            </ul>
+        </div>
+    {% else %}
+        <p class="alert alert-info">No participants or no scores recorded to determine top students.</p>
+    {% endif %}
+
+    {% if sorted_scores %}
+        <h3 class="mt-4">All Scores & Answers:</h3>
+        <div class="table-responsive">
+            <table class="results-table table table-striped table-hover">
+                <thead class="thead-light">
+                    <tr>
+                        <th>Rank</th>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Score</th>
+                        <th>Answers (Chosen vs Correct for Q-Ref ID)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for student in sorted_scores %}
+                        <tr>
+                            <td>{{ loop.index }}</td>
+                            <td>{{ student.name }}</td>
+                            <td>{{ student.email }}</td>
+                            <td><span class="badge badge-pill badge-secondary">{{ student.score }}</span></td>
+                            <td>
+                                <ul class="list-unstyled answer-details-list">
+                                    {% for q_db_id, answer_info in student.answers.items() %}
+                                        {% set question_obj = quiz_questions_map.get(q_db_id) %}
+                                        <li class="mb-2 pb-2 border-bottom">
+                                            <strong>Q-Ref {{ answer_info.question_ref_id }}:</strong> {{ answer_info.question_text }}<br>
+                                            <span class="answer-details 
+                                                {% if answer_info.is_correct %}correct alert-success p-1 rounded d-inline-block{% elif answer_info.chosen %}incorrect alert-danger p-1 rounded d-inline-block{% else %}no-answer alert-secondary p-1 rounded d-inline-block{% endif %}">
+                                                Chosen: {{ answer_info.chosen if answer_info.chosen else 'N/A' }}
+                                                (Correct: {{ answer_info.correct }})
+                                                {% if answer_info.is_correct %} <strong class="correct-tick">&#10004;</strong>
+                                                {% elif answer_info.chosen %} <strong class="incorrect-cross">&#10008;</strong>
+                                                {% else %} <span class="text-muted">(No Answer)</span>
+                                                {% endif %}
+                                            </span>
+                                        </li>
+                                    {% else %}
+                                        <li class="text-muted">Error: Question data not found for ID {{ q_db_id }}</li>
+                                    {% endfor %}
+                                </ul>
+                            </td>
+                        </tr>
+                    {% else %}
+                        <tr>
+                            <td colspan="5" class="text-center text-muted">No scores available.</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% elif total_participants > 0 %}
+         <p class="alert alert-warning">Scores are being processed or no responses were submitted.</p>
+    {% endif %}
+
+    <div class="nav-links mt-4">
+        <a href="{{ url_for('main.manage_session', class_session_id=class_session.id) }}" class="button button-secondary">Back to Session Management</a>
+        <a href="{{ url_for('main.index') }}" class="button">Go to Homepage</a>
+    </div>
+</div>
+{% endblock %}

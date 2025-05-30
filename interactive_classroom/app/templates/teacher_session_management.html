@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+
+{% block title %}Manage Session - {{ class_session.session_code }}{% endblock %}
+
+{% block content %}
+    <div class="teacher-session-management-container">
+        <h1>Manage Classroom Session</h1>
+
+        <div class="session-info card mb-3">
+            <div class="card-header">Session Details</div>
+            <div class="card-body">
+                <p><strong>Session Code:</strong> <span class="badge badge-secondary">{{ class_session.session_code }}</span> (DB ID: {{ class_session.id }})</p>
+                <p><strong>Students Joined:</strong> <span class="badge badge-info">{{ num_joined_students }}</span></p>
+                <p><strong>Share this QR Code for students to join:</strong></p>
+                <img src="{{ qr_code_url }}" alt="Session QR Code {{ class_session.session_code }}" class="qr-code img-thumbnail">
+                <hr>
+                <p><strong>Currently Active Question:</strong>
+                    <span class="active-indicator">
+                        {% if current_active_question_db_id %}
+                            Q-Ref: {{ current_active_question_ref_id_display }} (DB ID: {{ current_active_question_db_id }})
+                            <br><em>{{ (quiz_questions_db|selectattr('id', 'equalto', current_active_question_db_id)|first).text }}</em>
+                            <br>(Status: <span class="status-{{ current_question_status }}">{{ current_question_status|capitalize }}</span>)
+                        {% else %}
+                            <span class="status-none">None</span>
+                        {% endif %}
+                    </span>
+                </p>
+                {% if current_active_question_db_id %}
+                <p><strong>Responses Received:</strong> <span class="badge badge-primary">{{ num_responses_for_current_question }} / {{ num_joined_students }}</span></p>
+                    {% if current_question_status == 'open' %}
+                    <form method="POST" action="{{ url_for('main.teacher_close_question') }}" class="mt-2 mb-2">
+                        <input type="hidden" name="class_session_id" value="{{ class_session.id }}">
+                        <input type="hidden" name="question_db_id" value="{{ current_active_question_db_id }}">
+                        <button type="submit" class="button button-danger">Close Q-Ref {{ current_active_question_ref_id_display }} for Answers</button>
+                    </form>
+                    {% elif current_question_status == 'closed' %}
+                    <p><span class="badge badge-warning">Question Ref {{ current_active_question_ref_id_display }} is closed.</span> You can now activate another question.</p>
+                {% endif %}
+            {% endif %}
+        </div>
+
+        <hr>
+
+        <h3>Manage Questions:</h3>
+            </div>
+        </div>
+
+
+        <div class="manage-questions card mb-3">
+            <div class="card-header">Manage Questions</div>
+            <div class="card-body">
+                <ul class="list-group">
+                    {% for question in quiz_questions_db %} {# Iterate over Question objects from DB #}
+                        <li class="list-group-item question-item">
+                            <p><strong>Ref: {{ question.question_ref_id }}</strong> (DB ID: {{ question.id }}): {{ question.text }}
+                                {% if question.id == current_active_question_db_id %}
+                                    {% if current_question_status == 'open' %}
+                                        <span class="badge badge-success ml-2">Currently Open</span>
+                                    {% elif current_question_status == 'closed' %}
+                                        <span class="badge badge-warning ml-2">Active, but Closed</span>
+                                    {% endif %}
+                                {% endif %}
+                            </p>
+                            <ul class="options">
+                                {% set options = question.get_options_dict() %}
+                                {% for opt_key, opt_val in options.items() %}
+                                <li>{{ opt_key }}: {{ opt_val }}{% if opt_key == question.correct_answer %} <em class="active-indicator">(Correct)</em>{% endif %}</li>
+                                {% endfor %}
+                            </ul>
+                            <form method="POST" action="{{ url_for('main.set_active_question') }}" class="mt-2">
+                                <input type="hidden" name="class_session_id" value="{{ class_session.id }}">
+                                <input type="hidden" name="question_db_id" value="{{ question.id }}">
+                                <button type="submit" class="button button-primary" 
+                                        {% if current_question_status == 'open' and question.id == current_active_question_db_id %}
+                                            disabled title="This question is already open."
+                                        {% elif current_question_status == 'open' and question.id != current_active_question_db_id %}
+                                            disabled title="Another question (Ref: {{ current_active_question_ref_id_display }}) is currently open. Close it first."
+                                        {% elif question.id == current_active_question_db_id and current_question_status == 'closed' %}
+                                            disabled title="This question was just closed. Activate another or re-activate."
+                                        {% endif %}>
+                                    {% if question.id == current_active_question_db_id and current_question_status == 'open' %}
+                                        Already Open
+                                    {% elif question.id == current_active_question_db_id and current_question_status == 'closed' %}
+                                        Re-Open Ref {{ question.question_ref_id }} (Careful!)
+                                    {% else %}
+                                        Activate Ref {{ question.question_ref_id }}
+                                    {% endif %}
+                                </button>
+                            </form>
+                        </li>
+                    {% else %}
+                        <li class="list-group-item">No questions available in the database. Please seed them.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+
+        <div class="session-controls card">
+            <div class="card-header">Session Controls</div>
+            <div class="card-body">
+                <a href="{{ url_for('main.teacher_session_results', class_session_id=class_session.id) }}" class="button button-info mr-2">View Current Results</a>
+                
+                {% if class_session.is_active %}
+                <form method="POST" action="{{ url_for('main.teacher_end_session') }}" style="display: inline-block;">
+                    <input type="hidden" name="class_session_id" value="{{ class_session.id }}">
+                    <button type="submit" class="button button-secondary"
+                            onclick="return confirm('Are you sure you want to end this session? This will prevent new questions from being activated and effectively close the session.');">
+                        End Session
+                    </button>
+                </form>
+                {% else %}
+                <p><strong class="text-danger">This session has been ended.</strong></p>
+                {% endif %}
+            </div>
+        </div>
+        <a href="{{ url_for('main.index') }}" class="btn btn-link mt-3">Back to Teacher Dashboard</a>
+    </div>
+{% endblock %}

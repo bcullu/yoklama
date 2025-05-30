@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block title %}Welcome{% endblock %}
+
+{% block content %}
+<div class="index-page-container">
+    <div class="jumbotron">
+        <h1 class="display-4">Welcome to the Interactive Classroom!</h1>
+        <p class="lead">Engage with your students in real-time quizzes and Q&A sessions.</p>
+        <hr class="my-4">
+        <p>This platform allows teachers to host interactive sessions and students to participate using their devices.</p>
+        {% if not current_user.is_authenticated %}
+            <p class="lead mt-3">
+                {# Assuming student login is the primary entry for non-auth users, or guide to teacher login if that's separate #}
+                {# For now, let's guide teachers to start a session, which requires login #}
+                 Teachers, please log in to start or manage a session. Students will typically join via a QR code or link.
+            </p>
+        {% elif current_user.is_authenticated %}
+             {# Assuming a generic user might be a teacher or could be a student who is already logged in #}
+             {# A more sophisticated app would have roles and direct to teacher dashboard or student join page #}
+            <p class="lead mt-3">
+                You are logged in as {{ current_user.name }}.
+            </p>
+            <div class="action-buttons mt-3">
+                {# This is a placeholder; actual teacher dashboard link would be better #}
+                <a href="{{ url_for('main.teacher_start_session') }}" class="button button-primary">Start a New Session (Teachers)</a>
+                {# Or a link to a student view if they are already in a session? Complex logic for a generic index #}
+            </div>
+        {% endif %}
+    </div>
+
+    <div class="row">
+        <div class="col-md-6">
+            <h2>For Teachers</h2>
+            <p>Create interactive sessions, pose questions, and see results in real-time. Manage your classroom engagement effectively.</p>
+            <p><a class="button button-secondary" href="#">Learn More &raquo;</a></p> {# Placeholder link #}
+        </div>
+        <div class="col-md-6">
+            <h2>For Students</h2>
+            <p>Join sessions easily with a QR code, answer questions, and participate actively in your learning environment.</p>
+            <p><a class="button button-secondary" href="#">Learn More &raquo;</a></p> {# Placeholder link #}
+        </div>
+    </div>
+</div>
+{% endblock %}
